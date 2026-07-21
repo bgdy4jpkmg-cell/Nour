@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: nour-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - nour-network
+    restart: unless-stopped
+
+  # Backend API Server
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nour-backend
+    environment:
+      PORT: 5000
+      MONGODB_URI: mongodb://admin:admin123@mongodb:27017/nour?authSource=admin
+      JWT_SECRET: your_jwt_secret_key_here
+      NODE_ENV: production
+      STRIPE_SECRET: sk_test_your_stripe_key
+      OPENAI_API_KEY: sk-your_openai_key
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mongodb
+    networks:
+      - nour-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Web Application
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nour-frontend
+    environment:
+      REACT_APP_API_URL: http://backend:5000
+      REACT_APP_STRIPE_KEY: pk_test_your_stripe_key
+      REACT_APP_MAPBOX_TOKEN: pk_your_mapbox_token
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - nour-network
+    restart: unless-stopped
+
+  # Redis Cache (Optional)
+  redis:
+    image: redis:7-alpine
+    container_name: nour-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - nour-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  nour-network:
+    driver: bridge
